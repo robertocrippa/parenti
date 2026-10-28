@@ -2,14 +2,19 @@
 <html lang="it">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Parenti">
+<meta name="theme-color" content="#0a0612">
 <title>Parenti in Orbita</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bungee&family=Rubik:wght@500;800&display=swap">
 <style>
-html,body{margin:0}
+html,body{margin:0;background:#0a0612}
 
 /* Layout: one landscape arcade cabinet screen, letterboxed and centered */
 :root { --ink: #0a0612; --panel: #1a1030; --text: #ffffff; --gold: #ffd23f; --pink: #ff4fa3; color-scheme: dark; --fd: "Bungee", "Arial Black", Impact, sans-serif; --fb: "Rubik", Arial, sans-serif; }
@@ -61,7 +66,8 @@ const GROUP_PHOTO="data:image/jpeg;base64,/9j/4AAQSkZJRgABAQAAAQABAAD/2wBDAAcFBQ
 <script>
 'use strict';
 // ===== PARENTI IN ORBITA — sparatutto di famiglia =====
-const W = 960, H = 540;
+let W = 960; const H = 540;
+const MX = () => (W - 960) / 2;
 const cv = document.getElementById('game');
 const ctx = cv.getContext('2d');
 const wrap = document.getElementById('wrap');
@@ -69,6 +75,8 @@ let scale = 1, dpr = 1;
 function resize() {
   dpr = Math.min(2, window.devicePixelRatio || 1);
   const vw = wrap.clientWidth, vh = wrap.clientHeight;
+  W = vw > vh ? Math.round(Math.max(960, Math.min(1300, H * vw / vh))) : 960;
+  if (typeof layoutButtons === 'function') layoutButtons();
   scale = Math.min(vw / W, vh / H);
   cv.style.width = Math.floor(W * scale) + 'px';
   cv.style.height = Math.floor(H * scale) + 'px';
@@ -479,6 +487,7 @@ function toLogical(e) {
 let drag = null;
 cv.addEventListener('pointerdown', e => {
   e.preventDefault(); initAudio();
+  try { const de = document.documentElement; if (!document.fullscreenElement && de.requestFullscreen && window.innerWidth > window.innerHeight && /Android/i.test(navigator.userAgent)) de.requestFullscreen().catch(() => {}); } catch (er) {}
   const p = toLogical(e);
   if (state === 'play') {
     if (hitBtn(p, BTN.pause)) { paused = !paused; return; }
@@ -510,8 +519,8 @@ function dpadDir() {
   const k = Math.min(1, d / 46);
   return [dx / d * k, dy / d * k];
 }
-const DASH_BTN = { x: W - 64, y: H - 158, r: 32 };
-const BTN = { pause: { x: W - 50, y: 34, r: 22 }, mute: { x: W - 102, y: 34, r: 22 }, bomb: { x: W - 64, y: H - 64, r: 40 }, menu: { x: W / 2, y: H / 2 + 90, r: 70 } };
+let DASH_BTN = { x: W - 64, y: H - 158, r: 32 };
+let BTN = { pause: { x: W - 50, y: 34, r: 22 }, mute: { x: W - 102, y: 34, r: 22 }, bomb: { x: W - 64, y: H - 64, r: 40 }, menu: { x: W / 2, y: H / 2 + 90, r: 70 } };
 const hitBtn = (p, b) => Math.hypot(p.x - b.x, p.y - b.y) < b.r + 10;
 
 function goTitle() { setState('title'); playSong('title'); }
@@ -558,7 +567,12 @@ function gridCell(i) {
   return { x: (W - total) / 2 + col * (cw + gap), y: 318 + row * (ch + gap), w: cw, h: ch };
 }
 const OKBTN = { x: 840, y: 250, w: 96, h: 48 };
-const BOARD_BTN = { x: W / 2 - 110, y: H - 112, w: 220, h: 44 };
+let BOARD_BTN = { x: W / 2 - 110, y: H - 122, w: 220, h: 44 };
+function layoutButtons() {
+  DASH_BTN = { x: W - 64, y: H - 158, r: 32 };
+  BTN = { pause: { x: W - 50, y: 34, r: 22 }, mute: { x: W - 102, y: 34, r: 22 }, bomb: { x: W - 64, y: H - 64, r: 40 }, menu: { x: W / 2, y: H / 2 + 90, r: 70 } };
+  BOARD_BTN = { x: W / 2 - 110, y: H - 122, w: 220, h: 44 };
+}
 function onTap(x, y) {
   if (state === 'title') {
     if (hitBtn({ x, y }, { x: W - 50, y: 34, r: 22 })) { setMuted(!muted); return; }
@@ -566,6 +580,7 @@ function onTap(x, y) {
     setState('name'); SFX.ok(); return;
   }
   if (state === 'board') { goTitle(); return; }
+  if (state === 'select' || state === 'vehicle') x -= MX();
   if (state === 'select') {
     for (let i = 0; i < GRID.length; i++) {
       const c = gridCell(i);
@@ -1949,7 +1964,7 @@ function drawPlay() {
 
 // ---------- screens ----------
 function stripes(c1, c2, ang, sp) {
-  ctx.fillStyle = c1; ctx.fillRect(0, 0, W, H);
+  ctx.fillStyle = c1; ctx.fillRect(-400, 0, W + 800, H);
   ctx.save(); ctx.translate(W / 2, H / 2); ctx.rotate(ang);
   ctx.fillStyle = c2;
   const off = (T * sp) % 80;
@@ -1972,7 +1987,7 @@ function drawTitle() {
   txt('PARENTI', W / 2, H / 2 - 50 + bob, 92, '#ffd23f', 'center', FD, 14, '#2a0a3a');
   txt('IN ORBITA', W / 2, H / 2 + 40 + bob, 74, '#ff4fa3', 'center', FD, 12, '#2a0a3a');
   txt('Lo sparatutto della famiglia', W / 2, H / 2 + 100, 20, '#fff', 'center', FB, 5);
-  if (Math.floor(T * 2) % 2) txt('TOCCA PER GIOCARE', W / 2, H - 50, 26, '#fff', 'center', FD, 6);
+  if (Math.floor(T * 2) % 2) txt('TOCCA PER GIOCARE', W / 2, H - 30, 24, '#fff', 'center', FD, 6);
   ctx.fillStyle = 'rgba(10,6,20,.55)'; ctx.beginPath(); ctx.arc(W - 50, 34, 22, 0, TAU); ctx.fill();
   spr(muted ? '🔇' : '🔊', W - 50, 34, 20);
   const b = BOARD_BTN;
@@ -2204,9 +2219,9 @@ function frame(ts) {
   ctx.clearRect(0, 0, W, H);
   if (state === 'loading') { ctx.fillStyle = '#120a1e'; ctx.fillRect(0, 0, W, H); txt('Caricamento parenti…', W / 2, H / 2, 24, '#fff', 'center', FB); }
   else if (state === 'title') drawTitle();
-  else if (state === 'select' || state === 'name') drawSelect();
+  else if (state === 'select' || state === 'name') { ctx.fillStyle = '#120a24'; ctx.fillRect(0, 0, W, H); ctx.save(); ctx.translate(MX(), 0); drawSelect(); ctx.restore(); }
   else if (state === 'board') drawBoard();
-  else if (state === 'vehicle') drawVehicleSel();
+  else if (state === 'vehicle') { ctx.fillStyle = '#0e0a22'; ctx.fillRect(0, 0, W, H); ctx.save(); ctx.translate(MX(), 0); drawVehicleSel(); ctx.restore(); }
   else if (state === 'vs') drawVS();
   else if (state === 'play') drawPlay();
   else if (state === 'clear') drawClear();
