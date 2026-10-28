@@ -407,9 +407,32 @@ function localSave(row) {
 }
 function refreshLocalBoard() { if (!boardShared) { boardRows = localScores(); boardReady = true; } }
 refreshLocalBoard();
+// Shared leaderboard outside Claude (e.g. GitHub Pages): Supabase table "scores"
+const SB_URL = 'https://vpdrqlquaaoqvyjwozha.supabase.co';
+const SB_KEY = 'sb_publishable_OBaFHn6UT9yWtiNldl_5Uw_hVRazcOD';
+let sbOn = false;
+function bestPerPlayer(rows) {
+  const best = new Map();
+  for (const r of rows) { const k = String(r.name || '').toLowerCase().trim() + '|' + r.hero; const o = best.get(k); if (!o || r.score > o.score) best.set(k, r); }
+  return [...best.values()].sort((a, b) => b.score - a.score);
+}
+async function sbLoad() {
+  try {
+    const res = await fetch(SB_URL + '/rest/v1/scores?select=name,hero,level,score,crown,created_at&order=score.desc&limit=500', { headers: { apikey: SB_KEY } });
+    if (!res.ok) throw new Error('http ' + res.status);
+    const rows = await res.json();
+    sbOn = true; boardShared = true; boardReady = true;
+    boardRows = bestPerPlayer(rows.map(r => ({ name: r.name, hero: r.hero, level: r.level, levels: 13, score: r.score, won: !!r.crown, run: 'sb' + r.created_at })));
+    return true;
+  } catch (e) { if (!dbRef) { sbOn = false; boardShared = false; refreshLocalBoard(); } return false; }
+}
+async function sbSave(row) {
+  const res = await fetch(SB_URL + '/rest/v1/scores', { method: 'POST', headers: { apikey: SB_KEY, 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ name: row.name, hero: row.hero, level: row.level, score: row.score, crown: row.won }) });
+  if (!res.ok) throw new Error('http ' + res.status);
+}
 (async () => {
   try {
-    if (!window.claude || !window.claude.use) return;
+    if (!window.claude || !window.claude.use) { sbLoad(); return; }
     const db = await window.claude.use('db');
     if (!db) return;
     dbRef = db;
@@ -438,6 +461,13 @@ async function saveScore(won) {
       lastRank = rankIn(localScores());
     }
     savingRun = false;
+  } else if (!dbRef) {
+    try {
+      await sbSave(row);
+      await sbLoad();
+      saveNote = 'Punteggio salvato nella classifica di famiglia';
+      lastRank = bestPerPlayer(boardRows.concat([row])).findIndex(r => r.name === row.name && r.hero === row.hero) + 1 || null;
+    } catch (e) { saveNote = 'Salvato solo su questo telefono (niente connessione?)'; lastRank = rankIn(localScores()); }
   } else { saveNote = 'Salvato su questo telefono'; lastRank = rankIn(localScores()); }
 }
 const nameBox = () => document.getElementById('namebox');
@@ -528,7 +558,7 @@ function goTitle() { setState('title'); playSong('title'); }
 function onKey(code) {
   const enter = code === 'Enter' || code === 'Space';
   if (state === 'title' && enter) { setState('name'); SFX.ok(); }
-  else if (state === 'title' && code === 'KeyC') { setState('board'); SFX.select(); }
+  else if (state === 'title' && code === 'KeyC') { setState('board'); SFX.select(); if (!dbRef) sbLoad(); }
   else if (state === 'board' && (enter || code === 'Escape')) goTitle();
   else if (state === 'select') {
     const cols = 7;
@@ -576,7 +606,7 @@ function layoutButtons() {
 function onTap(x, y) {
   if (state === 'title') {
     if (hitBtn({ x, y }, { x: W - 50, y: 34, r: 22 })) { setMuted(!muted); return; }
-    if (x > BOARD_BTN.x && x < BOARD_BTN.x + BOARD_BTN.w && y > BOARD_BTN.y && y < BOARD_BTN.y + BOARD_BTN.h) { setState('board'); SFX.select(); return; }
+    if (x > BOARD_BTN.x && x < BOARD_BTN.x + BOARD_BTN.w && y > BOARD_BTN.y && y < BOARD_BTN.y + BOARD_BTN.h) { setState('board'); SFX.select(); if (!dbRef) sbLoad(); return; }
     setState('name'); SFX.ok(); return;
   }
   if (state === 'board') { goTitle(); return; }
@@ -1998,7 +2028,7 @@ function drawTitle() {
 function drawBoard() {
   stripes('#120a24', '#1a0f33', .4, 30);
   txt('🏆 CLASSIFICA DI FAMIGLIA', W / 2, 40, 30, '#ffd23f', 'center', FD, 6);
-  txt(boardShared ? 'I punteggi di tutti quelli che hanno giocato' : 'Punteggi giocati su questo telefono', W / 2, 74, 15, '#d8cdf0', 'center', FB);
+  txt(boardShared ? 'Il record di ognuno, con il personaggio usato' : 'Punteggi giocati su questo telefono', W / 2, 74, 15, '#d8cdf0', 'center', FB);
   const rows = boardRows.slice(0, 10);
   if (!rows.length) {
     txt('Ancora nessun punteggio.', W / 2, H / 2 - 10, 24, '#fff', 'center', FD, 4);
